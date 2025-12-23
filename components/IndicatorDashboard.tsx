@@ -3,7 +3,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { 
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine
 } from 'recharts';
-import { Save, AlertCircle, TrendingUp, CheckCircle2, Info, Pencil, Ban, Download, Loader2, Database } from 'lucide-react';
+import { Save, AlertCircle, TrendingUp, CheckCircle2, Pencil, Download, Loader2 } from 'lucide-react';
 import { GlobalFilters, MONTHS, IndicatorRecord, IndicatorConfig, GoalRecord } from '../types';
 import * as storage from '../services/storage';
 
@@ -29,7 +29,6 @@ const IndicatorSection: React.FC<SectionProps> = ({
   const calculateScore = (num: number, den: number, config: IndicatorConfig): number | null => {
     if (config.type === 'count') return num;
     if (den === 0) return 0;
-    
     if (config.type === 'percentage_fixed' || config.type === 'percentage_variable') {
       return Number(((num * 100) / den).toFixed(1));
     }
@@ -49,34 +48,25 @@ const IndicatorSection: React.FC<SectionProps> = ({
     return MONTHS.map(m => {
       const recordId = storage.generateRecordId(filters.sector, filters.year, m.value, indicator.id);
       const record = allRecords.find(r => r.id === recordId);
-      
       const defaultDenom = indicator.fixedDenominator || (indicator.type === 'rate_1000' ? 0 : 1);
-      
       const num = record ? record.numerator : 0;
       const den = record ? record.denominator : defaultDenom;
-      const isIgnored = record?.isIgnored === true;
-
       return {
         month: m.value,
         monthName: m.label.substring(0, 3),
         numerator: num,
         denominator: den,
         observation: record ? record.observation : '',
-        score: isIgnored ? null : calculateScore(num, den, indicator),
-        isRecorded: !!record,
-        isIgnored: isIgnored
+        score: record?.isIgnored ? null : calculateScore(num, den, indicator),
+        isIgnored: record?.is_ignored || record?.isIgnored || false
       };
     });
   }, [allRecords, filters.sector, filters.year, indicator]);
 
-  const handleInputChange = async (month: number, field: keyof IndicatorRecord, value: string | number | boolean) => {
+  const handleInputChange = async (month: number, field: keyof IndicatorRecord, value: any) => {
     const recordId = storage.generateRecordId(filters.sector, filters.year, month, indicator.id);
     const existingRecord = allRecords.find(r => r.id === recordId);
-    
-    let defaultDenom = indicator.fixedDenominator || 1;
-    if (indicator.type === 'rate_1000' || indicator.type === 'percentage_variable') {
-      defaultDenom = existingRecord?.denominator || 0;
-    }
+    const defaultDenom = indicator.fixedDenominator || (indicator.type === 'rate_1000' ? 0 : 1);
 
     const newRecord: IndicatorRecord = {
       id: recordId,
@@ -109,112 +99,67 @@ const IndicatorSection: React.FC<SectionProps> = ({
     await onGoalUpdate(newGoal);
   };
 
-  const exportToCSV = () => {
-    const headers = ['Ano', 'Mês', 'Numerador', 'Denominador', 'Resultado', 'Observação'];
-    const rows = currentData.map(d => [filters.year, d.monthName, d.numerator, d.denominator, d.score ?? 'N/A', `"${d.observation}"`]);
-    const csvContent = "data:text/csv;charset=utf-8," + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement("a");
-    link.setAttribute("href", encodedUri);
-    link.setAttribute("download", `${indicator.id}_${filters.sector}_${filters.year}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
-
   const averageScore = useMemo(() => {
-    const validMonths = currentData.filter(d => !d.isIgnored && d.score !== null && (d.isRecorded || d.numerator > 0));
-    if (validMonths.length === 0) return 0;
-    const sum = validMonths.reduce((acc, curr) => acc + (curr.score || 0), 0);
+    const valid = currentData.filter(d => !d.isIgnored && d.score !== null);
+    if (valid.length === 0) return 0;
+    const sum = valid.reduce((acc, curr) => acc + (curr.score || 0), 0);
     if (indicator.type === 'count') return sum;
-    return (sum / validMonths.length).toFixed(indicator.type === 'rate_1000' ? 2 : 1);
+    return (sum / valid.length).toFixed(indicator.type === 'rate_1000' ? 2 : 1);
   }, [currentData, indicator]);
-
-  const totalNumerator = useMemo(() => {
-    const validMonths = currentData.filter(d => !d.isIgnored);
-    return validMonths.reduce((acc, curr) => acc + curr.numerator, 0);
-  }, [currentData]);
 
   const isGoodScore = (score: number | null) => {
     if (score === null) return false;
-    if (indicator.isInverse) return score <= currentGoalValue;
-    return score >= currentGoalValue;
+    return indicator.isInverse ? score <= currentGoalValue : score >= currentGoalValue;
   };
 
   return (
     <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden mb-10 print:break-inside-avoid relative">
-      {isUpdating && (
-        <div className="absolute top-2 right-2 z-20">
-          <Loader2 size={16} className="text-sky-500 animate-spin" />
-        </div>
-      )}
-      {/* Indicator Header */}
+      {isUpdating && <div className="absolute top-2 right-2 z-20"><Loader2 size={16} className="text-sky-500 animate-spin" /></div>}
+      
       <div className="bg-slate-50 p-6 border-b border-slate-200">
         <div className="flex flex-col md:flex-row justify-between md:items-center gap-4">
           <div>
-            <h3 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+            <h3 className="text-xl font-bold text-slate-900 flex items-center gap-2">
               {indicator.name}
               {indicator.type === 'percentage_fixed' && (
-                <span className="text-xs bg-sky-100 text-sky-700 px-2 py-0.5 rounded-full font-normal border border-sky-200">
-                  Amostra Fixa (Sugerida): {indicator.fixedDenominator}
+                <span className="text-xs bg-sky-100 text-sky-700 px-2 py-0.5 rounded-full font-bold border border-sky-200">
+                  Amostra: {indicator.fixedDenominator}
                 </span>
               )}
             </h3>
-            <p className="text-slate-500 text-sm mt-1">{indicator.description}</p>
+            <p className="text-slate-600 text-sm mt-1">{indicator.description}</p>
           </div>
-          <button onClick={exportToCSV} className="flex items-center gap-2 px-3 py-1.5 text-xs font-medium text-slate-600 bg-white border border-slate-300 rounded hover:bg-slate-50 transition-colors print:hidden">
-            <Download size={14} /> Exportar CSV
-          </button>
         </div>
       </div>
 
-      {/* KPI Stats Row */}
       <div className="grid grid-cols-1 md:grid-cols-3 divide-y md:divide-y-0 md:divide-x divide-slate-100 border-b border-slate-200">
         <div className="p-6 flex items-center gap-4">
-          <div className="p-3 bg-sky-50 rounded-full text-sky-600">
-            <TrendingUp size={24} />
-          </div>
+          <div className="p-3 bg-sky-50 rounded-full text-sky-600"><TrendingUp size={24} /></div>
           <div>
-            <p className="text-sm font-medium text-slate-500">
-              {indicator.type === 'count' ? 'Total (Considerado)' : 'Média (Considerada)'}
-            </p>
-            <h3 className="text-2xl font-bold text-slate-800">
-              {averageScore}
-              <span className="text-sm font-normal text-slate-400 ml-1">{indicator.unit}</span>
-            </h3>
+            <p className="text-sm font-semibold text-slate-500 uppercase tracking-wider">Desempenho</p>
+            <h3 className="text-2xl font-black text-slate-900">{averageScore}<span className="text-sm font-normal text-slate-400 ml-1">{indicator.unit}</span></h3>
           </div>
         </div>
-
-        <div className="p-6 flex items-center gap-4">
-          <div className="p-3 bg-emerald-50 rounded-full text-emerald-600">
-            <CheckCircle2 size={24} />
-          </div>
-          <div>
-            <p className="text-sm font-medium text-slate-500">
-              {indicator.type === 'count' ? 'Ocorrências' : 'Numerador Total'}
-            </p>
-            <h3 className="text-2xl font-bold text-slate-800">{totalNumerator}</h3>
-          </div>
-        </div>
-
-        <div className="p-6 flex items-center gap-4 bg-amber-50/30">
-          <div className="p-3 bg-amber-50 rounded-full text-amber-600">
-            <AlertCircle size={24} />
-          </div>
+        <div className="p-6 flex items-center gap-4 bg-amber-50/20">
+          <div className="p-3 bg-amber-100 rounded-full text-amber-600"><AlertCircle size={24} /></div>
           <div className="flex-1">
-            <div className="flex justify-between items-center mb-1">
-              <p className="text-sm font-medium text-slate-500">Meta ({filters.year})</p>
-              <Pencil size={12} className="text-slate-400 print:hidden" />
-            </div>
+            <p className="text-sm font-semibold text-slate-500 mb-1 uppercase tracking-wider">Meta Anual</p>
             <div className="flex items-baseline gap-1">
               <input 
                 type="number" 
-                className="bg-white border border-amber-200 text-slate-800 font-bold text-xl rounded px-2 py-0.5 w-24 focus:ring-2 focus:ring-amber-400 outline-none print:border-none print:bg-transparent"
-                value={currentGoalValue}
-                onChange={(e) => handleGoalChange(e.target.value)}
+                className="bg-white border-2 border-amber-300 text-slate-900 font-black text-xl rounded-lg px-3 py-1 w-28 focus:ring-4 focus:ring-amber-200 focus:border-amber-500 outline-none transition-all shadow-sm" 
+                value={currentGoalValue} 
+                onChange={(e) => handleGoalChange(e.target.value)} 
               />
-              <span className="text-sm font-normal text-slate-400">{indicator.unit}</span>
+              <span className="text-sm font-black text-slate-500">{indicator.unit}</span>
             </div>
+          </div>
+        </div>
+        <div className="p-6 flex items-center gap-4">
+          <div className="p-3 bg-emerald-50 rounded-full text-emerald-600"><CheckCircle2 size={24} /></div>
+          <div>
+            <p className="text-sm font-semibold text-slate-500 uppercase tracking-wider">Total Acumulado</p>
+            <h3 className="text-2xl font-black text-slate-900">{currentData.reduce((a, b) => a + b.numerator, 0)}</h3>
           </div>
         </div>
       </div>
@@ -225,70 +170,65 @@ const IndicatorSection: React.FC<SectionProps> = ({
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={currentData} margin={{ top: 5, right: 30, left: 10, bottom: 5 }}>
                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                <XAxis dataKey="monthName" axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12 }} />
-                <YAxis axisLine={false} tickLine={false} tick={{ fill: '#64748b', fontSize: 12 }} />
-                <Tooltip contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} cursor={{ stroke: '#cbd5e1', strokeWidth: 1 }} formatter={(value: any) => [value, indicator.name]} labelStyle={{ color: '#64748b' }} />
-                <ReferenceLine y={currentGoalValue} label="Meta" stroke={indicator.isInverse ? "#ef4444" : "#f59e0b"} strokeDasharray="3 3" />
-                <Line type="monotone" dataKey="score" stroke="#0284c7" strokeWidth={3} dot={{ r: 4, fill: '#0284c7', strokeWidth: 2, stroke: '#fff' }} activeDot={{ r: 6, fill: '#0ea5e9' }} animationDuration={1000} connectNulls={false} />
+                <XAxis dataKey="monthName" axisLine={false} tickLine={false} tick={{ fill: '#334155', fontSize: 12, fontWeight: 'bold' }} />
+                <YAxis axisLine={false} tickLine={false} tick={{ fill: '#334155', fontSize: 12 }} />
+                <Tooltip contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)' }} />
+                <ReferenceLine y={currentGoalValue} stroke={indicator.isInverse ? "#ef4444" : "#f59e0b"} strokeDasharray="3 3" />
+                <Line type="monotone" dataKey="score" stroke="#0284c7" strokeWidth={4} dot={{ r: 6, fill: '#0284c7', strokeWidth: 2, stroke: '#fff' }} activeDot={{ r: 9 }} connectNulls={false} />
               </LineChart>
             </ResponsiveContainer>
           </div>
         </div>
 
         <div className="bg-slate-50 flex flex-col max-h-[500px] overflow-hidden print:hidden">
-          <div className="p-3 border-b border-slate-200 bg-slate-100/50 flex items-center justify-between">
-            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider flex items-center gap-2">
-              <Save size={14} /> Dados Mensais
-            </span>
+          <div className="p-3 border-b border-slate-200 bg-slate-100 flex items-center justify-between">
+            <span className="text-xs font-black text-slate-700 uppercase tracking-widest flex items-center gap-2"><Save size={14} /> Auditoria Mensal</span>
           </div>
-          <div className="overflow-y-auto flex-1 p-0">
+          <div className="overflow-y-auto flex-1">
              <table className="w-full text-sm text-left border-collapse">
-              <thead className="text-xs text-slate-500 uppercase bg-slate-100 sticky top-0 z-10 shadow-sm">
+              <thead className="text-[10px] text-slate-500 uppercase bg-slate-100 sticky top-0 z-10 shadow-sm font-black tracking-tighter">
                 <tr>
-                  <th className="px-2 py-2 w-8 text-center"></th>
-                  <th className="px-2 py-2 font-semibold">Mês</th>
-                  <th className="px-2 py-2 text-center w-20">{indicator.type === 'count' ? 'Qtd' : 'Num.'}</th>
-                  {indicator.type !== 'count' && <th className="px-2 py-2 text-center w-20">{indicator.fixedDenominator ? 'Den.' : 'Den.'}</th>}
-                  <th className="px-2 py-2 text-right w-16">{indicator.unit || 'Res.'}</th>
+                  <th className="px-2 py-3 w-8 text-center">OK</th>
+                  <th className="px-2 py-3">Mês</th>
+                  <th className="px-2 py-3 text-center w-20">Num.</th>
+                  {indicator.type !== 'count' && <th className="px-2 py-3 text-center w-20">Den.</th>}
+                  <th className="px-2 py-3 text-right w-16">Res.</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-200">
                 {currentData.map((row) => {
                   const isCurrentFilterMonth = row.month === filters.month;
-                  const isDisabled = row.isIgnored;
-                  const scoreColor = isGoodScore(row.score) ? 'text-emerald-600' : 'text-amber-600';
                   return (
                     <React.Fragment key={row.month}>
-                      <tr className={`${isCurrentFilterMonth ? 'bg-sky-100/50' : 'bg-white hover:bg-slate-50'} ${isDisabled ? 'bg-slate-100 opacity-60' : ''}`}>
-                        <td className="px-2 py-2 text-center border-r border-slate-100">
-                           <input type="checkbox" className="rounded border-slate-300 text-sky-600 focus:ring-sky-500 cursor-pointer" checked={!row.isIgnored} onChange={(e) => handleInputChange(row.month, 'isIgnored', !e.target.checked)} />
-                        </td>
-                        <td className="px-2 py-3 font-medium text-slate-700 border-r border-transparent">{row.monthName}</td>
+                      <tr className={`${isCurrentFilterMonth ? 'bg-sky-50 ring-2 ring-inset ring-sky-200' : 'bg-white hover:bg-slate-50'} ${row.isIgnored ? 'opacity-40 grayscale' : ''} transition-all`}>
                         <td className="px-2 py-2 text-center">
-                          <input type="number" min="0" disabled={isDisabled} className={`w-full p-1.5 border rounded text-center font-medium shadow-sm outline-none ${isDisabled ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed' : 'bg-white border-slate-300 text-slate-900 focus:ring-2 focus:ring-sky-500'}`} value={row.numerator || ''} onChange={(e) => handleInputChange(row.month, 'numerator', Number(e.target.value))} />
+                           <input type="checkbox" className="w-5 h-5 rounded-md text-sky-600 focus:ring-sky-500 cursor-pointer" checked={!row.isIgnored} onChange={(e) => handleInputChange(row.month, 'isIgnored', !e.target.checked)} />
+                        </td>
+                        <td className="px-2 py-3 font-black text-slate-900">{row.monthName}</td>
+                        <td className="px-2 py-2">
+                          <input 
+                            type="number" 
+                            min="0" 
+                            disabled={row.isIgnored} 
+                            className="w-full p-2 border-2 border-slate-200 rounded-lg text-center bg-white text-slate-900 font-black focus:ring-4 focus:ring-sky-100 focus:border-sky-500 outline-none transition-all" 
+                            value={row.numerator || ''} 
+                            onChange={(e) => handleInputChange(row.month, 'numerator', Number(e.target.value))} 
+                          />
                         </td>
                         {indicator.type !== 'count' && (
-                          <td className="px-2 py-2 text-center">
+                          <td className="px-2 py-2">
                              <input 
-                               type="number" 
-                               min="0" 
-                               disabled={isDisabled} 
-                               className={`w-full p-1.5 border rounded text-center font-medium shadow-sm outline-none ${isDisabled ? 'bg-slate-100 text-slate-400 border-slate-200 cursor-not-allowed' : 'bg-white border-slate-300 text-slate-900 focus:ring-2 focus:ring-sky-500'}`} 
-                               value={row.denominator || ''} 
-                               onChange={(e) => handleInputChange(row.month, 'denominator', Number(e.target.value))} 
-                             />
+                              type="number" 
+                              min="0" 
+                              disabled={row.isIgnored} 
+                              className="w-full p-2 border-2 border-slate-200 rounded-lg text-center bg-white text-slate-900 font-black focus:ring-4 focus:ring-sky-100 focus:border-sky-500 outline-none transition-all" 
+                              value={row.denominator || ''} 
+                              onChange={(e) => handleInputChange(row.month, 'denominator', Number(e.target.value))} 
+                            />
                           </td>
                         )}
-                        <td className={`px-2 py-3 text-right font-bold ${isDisabled ? 'text-slate-300' : scoreColor}`}>{row.score ?? '-'}</td>
+                        <td className={`px-2 py-3 text-right font-black text-base ${row.isIgnored ? 'text-slate-300' : isGoodScore(row.score) ? 'text-emerald-600' : 'text-amber-600'}`}>{row.score ?? '-'}</td>
                       </tr>
-                      {!isDisabled && (
-                        <tr className={`${isCurrentFilterMonth ? 'bg-sky-100/50' : 'bg-white'}`}>
-                          <td colSpan={1}></td>
-                          <td colSpan={indicator.type === 'count' ? 3 : 4} className="px-2 pb-2 pt-0">
-                            <input type="text" className="w-full text-xs text-slate-600 bg-transparent border-b border-dashed border-slate-200 focus:border-sky-500 outline-none py-1" placeholder="Observação..." value={row.observation} onChange={(e) => handleInputChange(row.month, 'observation', e.target.value)} />
-                          </td>
-                        </tr>
-                      )}
                     </React.Fragment>
                   );
                 })}
@@ -312,101 +252,44 @@ export const IndicatorDashboard: React.FC<DashboardProps> = ({ title, subtitle, 
   const [localRecords, setLocalRecords] = useState<IndicatorRecord[]>([]);
   const [localGoals, setLocalGoals] = useState<GoalRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
   const fetchData = async () => {
     setIsLoading(true);
-    setError(null);
     try {
-      const [records, goals] = await Promise.all([
-        storage.loadRecords(),
-        storage.loadGoals()
-      ]);
+      const [records, goals] = await Promise.all([storage.loadRecords(), storage.loadGoals()]);
       setLocalRecords(records);
       setLocalGoals(goals);
-    } catch (err: any) {
-      console.error("Dashboard Load Error:", err);
-      setError(err.message || "Erro desconhecido ao conectar com o banco de dados.");
+    } catch (err) {
+      console.error(err);
     } finally {
       setIsLoading(false);
     }
   };
 
-  useEffect(() => {
-    fetchData();
-  }, []);
+  useEffect(() => { fetchData(); }, []);
 
-  const handleRecordUpdate = async (newRecord: IndicatorRecord) => {
-    // Optimistic update
+  const handleRecordUpdate = async (rec: IndicatorRecord) => {
     setLocalRecords(prev => {
-      const index = prev.findIndex(r => r.id === newRecord.id);
-      if (index >= 0) {
-        const updated = [...prev];
-        updated[index] = newRecord;
-        return updated;
-      }
-      return [...prev, newRecord];
+      const idx = prev.findIndex(r => r.id === rec.id);
+      return idx >= 0 ? prev.map(r => r.id === rec.id ? rec : r) : [...prev, rec];
     });
-    
-    await storage.upsertRecord(newRecord);
+    await storage.upsertRecord(rec);
   };
 
-  const handleGoalUpdate = async (newGoal: GoalRecord) => {
-    // Optimistic update
+  const handleGoalUpdate = async (goal: GoalRecord) => {
     setLocalGoals(prev => {
-      const index = prev.findIndex(g => g.id === newGoal.id);
-      if (index >= 0) {
-        const updated = [...prev];
-        updated[index] = newGoal;
-        return updated;
-      }
-      return [...prev, newGoal];
+      const idx = prev.findIndex(g => g.id === goal.id);
+      return idx >= 0 ? prev.map(g => g.id === goal.id ? goal : g) : [...prev, goal];
     });
-
-    await storage.upsertGoal(newGoal);
+    await storage.upsertGoal(goal);
   };
 
-  if (isLoading) {
-    return (
-      <div className="flex flex-col items-center justify-center h-96 gap-4 text-slate-500">
-        <Loader2 className="animate-spin text-sky-600" size={48} />
-        <p className="animate-pulse">Carregando indicadores do Supabase...</p>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="p-10 max-w-4xl mx-auto">
-        <div className="bg-red-50 border border-red-200 rounded-xl p-8 text-center space-y-4">
-          <div className="mx-auto w-16 h-16 bg-red-100 rounded-full flex items-center justify-center text-red-600">
-            <Database size={32} />
-          </div>
-          <h2 className="text-2xl font-bold text-red-800">Erro de Conexão</h2>
-          <p className="text-red-600 max-w-md mx-auto">
-            Não foi possível carregar os dados do banco de dados. Verifique se as tabelas foram criadas no Supabase ou se as chaves API são válidas.
-          </p>
-          <div className="text-xs bg-red-100/50 p-3 rounded font-mono text-red-500 break-all">
-            Log: {error}
-          </div>
-          <button 
-            onClick={fetchData}
-            className="px-6 py-2 bg-red-600 text-white rounded-lg font-bold hover:bg-red-700 transition-colors shadow-lg"
-          >
-            Tentar Novamente
-          </button>
-        </div>
-      </div>
-    );
-  }
+  if (isLoading) return <div className="flex flex-col items-center justify-center h-96 gap-4 text-slate-500"><Loader2 className="animate-spin text-sky-600" size={48} /><p className="font-black text-slate-900 uppercase tracking-widest">Sincronizando Dados...</p></div>;
 
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-8 animate-in fade-in duration-500 pb-20 print:p-0">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8 border-b border-slate-200 pb-6 print:hidden">
-        <div>
-          <h2 className="text-3xl font-bold text-slate-800 tracking-tight">{title}</h2>
-          <p className="text-slate-500 text-lg">{subtitle}</p>
-        </div>
+        <div><h2 className="text-3xl font-black text-slate-900 tracking-tight">{title}</h2><p className="text-slate-500 text-lg font-medium">{subtitle}</p></div>
       </div>
       <div className="flex flex-col gap-10">
         {indicators.map((ind) => (

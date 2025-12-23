@@ -12,9 +12,9 @@ export interface IndicatorRecord {
   month: number;
   indicatorId: string;
   numerator: number; // e.g., Conformidades, Eventos, Quedas
-  denominator: number; // e.g., Total, Pacientes-Dia (can be 1 or 17 fixed)
+  denominator: number; // e.g., Total, Pacientes-Dia
   observation: string;
-  isIgnored?: boolean; // New field: if true, excludes from stats
+  isIgnored?: boolean;
 }
 
 export interface GoalRecord {
@@ -30,7 +30,7 @@ export interface PlanningRecord {
   sector: string;
   year: number;
   month: number;
-  responsible: string; // Name of person responsible
+  responsible: string;
 }
 
 export type IndicatorType = 'percentage_fixed' | 'percentage_variable' | 'count' | 'rate_1000';
@@ -40,10 +40,10 @@ export interface IndicatorConfig {
   name: string;
   description: string;
   type: IndicatorType;
-  fixedDenominator?: number; // e.g., 17 for sampling
-  defaultGoal?: number; // Fallback if no specific goal is set
-  isInverse?: boolean; // If true, lower is better (e.g. falls, adverse events)
-  unit?: string; // %, ‰, or empty
+  fixedDenominator?: number;
+  defaultGoal?: number;
+  isInverse?: boolean;
+  unit?: string;
 }
 
 export const SECTORS = [

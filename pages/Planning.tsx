@@ -1,22 +1,19 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { CalendarDays, User, X, Check, BarChart as BarChartIcon, Trophy, Loader2 } from 'lucide-react';
-import { 
-  BarChart, 
-  Bar, 
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
-  Tooltip, 
-  ResponsiveContainer,
-  Cell 
-} from 'recharts';
+import { CalendarDays, X, Check, Loader2, Trophy, UserPlus } from 'lucide-react';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { SECTORS, MONTHS, GlobalFilters, PlanningRecord } from '../types';
 import * as storage from '../services/storage';
 
 interface PlanningProps {
   currentFilters: GlobalFilters;
 }
+
+// Cores vibrantes e profissionais para o ranking
+const RANK_COLORS = [
+  '#0284c7', '#059669', '#7c3aed', '#db2777', '#ea580c', 
+  '#2563eb', '#16a34a', '#4f46e5', '#be185d', '#d97706'
+];
 
 export const Planning: React.FC<PlanningProps> = ({ currentFilters }) => {
   const [planningData, setPlanningData] = useState<PlanningRecord[]>([]);
@@ -27,8 +24,10 @@ export const Planning: React.FC<PlanningProps> = ({ currentFilters }) => {
   useEffect(() => {
     const fetchData = async () => {
       setIsLoading(true);
-      const data = await storage.loadPlanning();
-      setPlanningData(data);
+      try {
+        const data = await storage.loadPlanning();
+        setPlanningData(data);
+      } catch (err) { console.error(err); }
       setIsLoading(false);
     };
     fetchData();
@@ -40,154 +39,183 @@ export const Planning: React.FC<PlanningProps> = ({ currentFilters }) => {
   };
 
   const handleCellClick = (sector: string, month: number) => {
-    const currentName = getResponsible(sector, month);
-    setTempName(currentName);
+    setTempName(getResponsible(sector, month));
     setEditingCell({ sector, month });
   };
 
   const saveEdit = async () => {
     if (!editingCell) return;
     const id = storage.generatePlanningId(editingCell.sector, currentFilters.year, editingCell.month);
-    const newRecord: PlanningRecord = {
-      id,
-      sector: editingCell.sector,
-      year: currentFilters.year,
-      month: editingCell.month,
-      responsible: tempName
+    const newRecord: PlanningRecord = { 
+      id, 
+      sector: editingCell.sector, 
+      year: currentFilters.year, 
+      month: editingCell.month, 
+      responsible: tempName 
     };
-
-    // Optimistic update
-    setPlanningData(prev => {
-      if (!tempName || tempName.trim() === '') {
-        return prev.filter(r => r.id !== id);
-      }
-      const index = prev.findIndex(r => r.id === id);
-      if (index >= 0) {
-        const updated = [...prev];
-        updated[index] = newRecord;
-        return updated;
-      }
-      return [...prev, newRecord];
-    });
-
+    
+    setPlanningData(prev => !tempName.trim() 
+      ? prev.filter(r => r.id !== id) 
+      : (prev.find(r => r.id === id) ? prev.map(r => r.id === id ? newRecord : r) : [...prev, newRecord])
+    );
+    
     await storage.upsertPlanning(newRecord);
     setEditingCell(null);
   };
 
-  const cancelEdit = () => {
-    setEditingCell(null);
-    setTempName('');
-  };
-
   const productivityStats = useMemo(() => {
-    const currentYearData = planningData.filter(r => r.year === currentFilters.year && r.responsible.trim() !== '');
-    const totalAssignments = currentYearData.length;
+    const yearData = planningData.filter(r => r.year === currentFilters.year && r.responsible.trim() !== '');
     const counts: Record<string, number> = {};
-    currentYearData.forEach(r => {
+    yearData.forEach(r => {
       const name = r.responsible.trim();
       counts[name] = (counts[name] || 0) + 1;
     });
-    const ranking = Object.entries(counts)
-      .map(([name, count]) => ({
-        name,
-        count,
-        percentage: totalAssignments > 0 ? ((count / totalAssignments) * 100).toFixed(1) : '0'
-      }))
+    return Object.entries(counts)
+      .map(([name, count]) => ({ name, count }))
       .sort((a, b) => b.count - a.count);
-    return { ranking, totalAssignments };
   }, [planningData, currentFilters.year]);
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <Loader2 className="animate-spin text-sky-600" size={48} />
-      </div>
-    );
-  }
+  if (isLoading) return <div className="flex items-center justify-center h-full"><Loader2 className="animate-spin text-sky-600" size={48} /></div>;
 
   return (
     <div className="p-6 max-w-[1600px] mx-auto space-y-8 animate-in fade-in pb-20 print:p-0">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-slate-200 pb-6 print:hidden">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center border-b border-slate-200 pb-6 print:hidden">
         <div className="flex items-center gap-3">
           <div className="bg-sky-100 p-2 rounded-lg"><CalendarDays className="text-sky-600" size={24} /></div>
           <div>
-            <h2 className="text-3xl font-bold text-slate-800 tracking-tight">Planejamento Anual</h2>
-            <p className="text-slate-500 text-lg">Responsabilidades ({currentFilters.year})</p>
+            <h2 className="text-3xl font-black text-slate-900 tracking-tight">Escala de Responsabilidades</h2>
+            <p className="text-slate-600 font-medium">Gestão de Auditorias NQSP - {currentFilters.year}</p>
           </div>
         </div>
       </div>
-      <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden overflow-x-auto">
-          <table className="w-full text-sm border-collapse">
-            <thead>
-              <tr>
-                <th className="sticky left-0 z-20 bg-slate-50 p-4 text-left font-bold text-slate-700 border-b border-r border-slate-200 min-w-[200px]">Setor</th>
-                {MONTHS.map(m => <th key={m.value} className="bg-slate-50 p-2 text-center font-bold text-slate-600 border-b border-slate-200 min-w-[100px]">{m.label.substring(0, 3)}</th>)}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {SECTORS.map((sector) => (
-                <tr key={sector} className="hover:bg-slate-50 group">
-                  <td className="sticky left-0 z-10 bg-white group-hover:bg-slate-50 p-3 font-semibold text-slate-700 border-r border-slate-200 text-xs">{sector}</td>
-                  {MONTHS.map((month) => {
-                    const responsible = getResponsible(sector, month.value);
-                    const isEditing = editingCell?.sector === sector && editingCell?.month === month.value;
-                    return (
-                      <td key={`${sector}-${month.value}`} className={`p-1 border-r border-slate-100 relative h-12 ${!isEditing ? 'cursor-pointer hover:bg-sky-50' : ''} ${responsible && !isEditing ? 'bg-sky-50/50' : ''}`} onClick={() => !isEditing && handleCellClick(sector, month.value)}>
-                        {isEditing ? (
-                          <div className="absolute inset-0 z-30 bg-white flex items-center p-1 shadow-lg ring-2 ring-sky-500 rounded-sm">
-                            <input autoFocus className="w-full h-full px-2 text-xs outline-none bg-transparent text-slate-900 font-medium" value={tempName} onChange={(e) => setTempName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && saveEdit()} />
-                            <div className="flex items-center">
-                              <button onClick={saveEdit} className="p-1 text-emerald-600 hover:bg-emerald-50 rounded transition-colors"><Check size={14} /></button>
-                              <button onClick={cancelEdit} className="p-1 text-red-500 hover:bg-red-50 rounded transition-colors"><X size={14} /></button>
-                            </div>
-                          </div>
-                        ) : (
-                          <div className="w-full h-full flex flex-col items-center justify-center">
-                            {responsible ? <span className="text-[10px] font-medium text-sky-700 truncate w-full text-center">{responsible}</span> : <div className="w-1.5 h-1.5 rounded-full bg-slate-200"></div>}
-                          </div>
-                        )}
-                      </td>
-                    );
-                  })}
-                </tr>
+
+      <div className="bg-white border border-slate-200 rounded-xl shadow-lg overflow-x-auto relative">
+        <table className="w-full text-sm border-collapse">
+          <thead className="bg-slate-50 text-slate-900">
+            <tr className="border-b border-slate-200">
+              <th className="sticky left-0 bg-slate-50 p-4 text-left border-r border-slate-200 min-w-[220px] font-black uppercase text-xs tracking-wider z-10">Setores Hospitalares</th>
+              {MONTHS.map(m => (
+                <th key={m.value} className="p-2 border-b border-slate-200 font-black text-center uppercase text-[10px] tracking-widest min-w-[80px]">{m.label.substring(0, 3)}</th>
               ))}
-            </tbody>
-          </table>
+            </tr>
+          </thead>
+          <tbody>
+            {SECTORS.map(sector => (
+              <tr key={sector} className="hover:bg-slate-50 transition-colors border-b border-slate-100">
+                <td className="sticky left-0 bg-white font-bold p-3 border-r border-slate-200 text-xs text-slate-900 z-10">{sector}</td>
+                {MONTHS.map(month => {
+                  const resp = getResponsible(sector, month.value);
+                  const isEditing = editingCell?.sector === sector && editingCell?.month === month.value;
+                  return (
+                    <td 
+                      key={month.value} 
+                      className={`p-1 border-r border-slate-50 h-16 relative text-center cursor-pointer transition-all ${resp ? 'bg-sky-50/60' : ''}`} 
+                      onClick={() => !isEditing && handleCellClick(sector, month.value)}
+                    >
+                      {isEditing ? (
+                        <div className="absolute inset-y-0 -inset-x-20 bg-white z-50 flex items-center p-2 shadow-[0_20px_50px_rgba(0,0,0,0.2)] ring-2 ring-sky-500 rounded-lg min-w-[300px]">
+                          <div className="bg-sky-50 p-2 rounded-l-md text-sky-600">
+                            <UserPlus size={18} />
+                          </div>
+                          <input 
+                            autoFocus 
+                            className="flex-1 h-full text-base outline-none text-slate-900 font-black px-4 bg-white" 
+                            placeholder="Nome do Colaborador..."
+                            value={tempName} 
+                            onChange={(e) => setTempName(e.target.value)} 
+                            onKeyDown={(e) => e.key === 'Enter' && saveEdit()} 
+                          />
+                          <div className="flex gap-2 ml-2 pr-2">
+                            <button onClick={saveEdit} title="Confirmar" className="p-2.5 bg-sky-600 text-white rounded-lg hover:bg-sky-700 transition-colors shadow-md">
+                              <Check size={20} />
+                            </button>
+                            <button onClick={() => setEditingCell(null)} title="Fechar" className="p-2.5 bg-slate-100 text-slate-500 rounded-lg hover:bg-slate-200 transition-colors">
+                              <X size={20} />
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center group">
+                          <span className="text-[11px] font-black text-slate-900 truncate block px-1 leading-tight group-hover:text-sky-600">{resp}</span>
+                        </div>
+                      )}
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 pt-6 border-t border-slate-200">
-        <div className="lg:col-span-2 bg-white p-6 rounded-xl border border-slate-200 shadow-sm">
-          <div className="h-64 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={productivityStats.ranking} layout="vertical" margin={{ left: 40 }}>
-                <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 pt-8 border-t border-slate-200 print:hidden">
+        <div className="lg:col-span-2 bg-white p-8 rounded-2xl border border-slate-200 shadow-sm">
+          <div className="flex items-center justify-between mb-8">
+            <h4 className="font-black text-slate-900 text-lg flex items-center gap-2 uppercase tracking-tight">
+              <Trophy className="text-amber-500" size={24} /> 
+              Ranking de Atividades Realizadas
+            </h4>
+          </div>
+          <div className="h-96 w-full">
+            <ResponsiveContainer>
+              <BarChart data={productivityStats} layout="vertical" margin={{ left: 40, right: 40 }}>
+                <CartesianGrid horizontal={false} stroke="#f1f5f9" strokeDasharray="3 3" />
                 <XAxis type="number" hide />
-                <YAxis dataKey="name" type="category" tick={{ fill: '#475569', fontSize: 12 }} width={100}/>
-                <Tooltip cursor={{fill: '#f1f5f9'}} />
-                <Bar dataKey="count" name="Visitas" radius={[0, 4, 4, 0]} barSize={20}>
-                  {productivityStats.ranking.map((_, index) => <Cell key={`cell-${index}`} fill={index === 0 ? '#0ea5e9' : '#94a3b8'} />)}
+                <YAxis 
+                  dataKey="name" 
+                  type="category" 
+                  width={140} 
+                  tick={{fill: '#0f172a', fontSize: 13, fontWeight: 'bold'}} 
+                  axisLine={false}
+                  tickLine={false}
+                />
+                <Tooltip 
+                  cursor={{fill: '#f8fafc'}}
+                  contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)', fontWeight: 'bold' }}
+                />
+                <Bar 
+                  dataKey="count" 
+                  radius={[0, 12, 12, 0]} 
+                  barSize={45} // Barras bem robustas
+                >
+                  {productivityStats.map((_, index) => (
+                    <Cell key={`cell-${index}`} fill={RANK_COLORS[index % RANK_COLORS.length]} />
+                  ))}
                 </Bar>
               </BarChart>
             </ResponsiveContainer>
           </div>
         </div>
-        <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-sm overflow-y-auto max-h-64">
-           <table className="w-full text-sm">
-              <thead className="text-xs text-slate-400 uppercase border-b border-slate-100">
-                <tr><th className="text-left py-2">Colaborador</th><th className="text-center py-2">Visitas</th><th className="text-right py-2">%</th></tr>
-              </thead>
-              <tbody className="divide-y divide-slate-50">
-                {productivityStats.ranking.map((item, index) => (
-                    <tr key={item.name} className="hover:bg-slate-50">
-                      <td className="py-3 flex items-center gap-2">
-                        <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${index === 0 ? 'bg-amber-100 text-amber-700' : 'bg-slate-50 text-slate-400'}`}>{index + 1}</span>
-                        <span className="font-medium text-slate-700">{item.name}</span>
+        
+        <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col max-h-[500px]">
+           <h4 className="font-black text-slate-900 text-sm mb-6 uppercase tracking-widest border-b border-slate-100 pb-3">Quadro de Auditores</h4>
+           <div className="overflow-y-auto flex-1 pr-2 custom-scrollbar">
+             <table className="w-full text-sm">
+                <thead className="border-b border-slate-50 text-[10px] uppercase text-slate-400 font-black tracking-widest sticky top-0 bg-white z-10">
+                  <tr><th className="text-left py-2">Colaborador</th><th className="text-right py-2">Visitas</th></tr>
+                </thead>
+                <tbody className="divide-y divide-slate-50">
+                  {productivityStats.map((item, idx) => (
+                    <tr key={item.name} className="hover:bg-slate-50 group">
+                      <td className="py-4 font-bold text-slate-900 flex items-center gap-4">
+                        <span 
+                          className="w-8 h-8 rounded-xl flex items-center justify-center text-xs font-black text-white shadow-lg transform group-hover:scale-110 transition-transform"
+                          style={{ backgroundColor: RANK_COLORS[idx % RANK_COLORS.length] }}
+                        >
+                          {idx + 1}
+                        </span>
+                        {item.name}
                       </td>
-                      <td className="py-3 text-center font-bold text-slate-800">{item.count}</td>
-                      <td className="py-3 text-right text-slate-500 text-xs">{item.percentage}%</td>
+                      <td className="py-4 text-right">
+                        <span className="font-black text-slate-900 bg-slate-100 group-hover:bg-sky-600 group-hover:text-white transition-all px-3 py-1.5 rounded-lg text-sm">
+                          {item.count}
+                        </span>
+                      </td>
                     </tr>
-                ))}
-              </tbody>
-            </table>
+                  ))}
+                </tbody>
+              </table>
+           </div>
         </div>
       </div>
     </div>

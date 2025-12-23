@@ -1,7 +1,7 @@
 
 import React, { useEffect, useState, useMemo } from 'react';
 import { 
-  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
 } from 'recharts';
 import { Printer, TrendingUp, TrendingDown, Minus, Loader2, X, FileText, CheckCircle2 } from 'lucide-react';
 import { 
@@ -19,10 +19,7 @@ interface GlobalAnalyticsProps {
 
 const AnalysisCard: React.FC<{ indicator: IndicatorConfig, data: any[], sector: string }> = ({ indicator, data, sector }) => {
   const sortedData = useMemo(() => {
-    return [...data].sort((a, b) => {
-      if (a.year !== b.year) return a.year - b.year;
-      return a.month - b.month;
-    });
+    return [...data].sort((a, b) => (a.year !== b.year ? a.year - b.year : a.month - b.month));
   }, [data]);
 
   const lastPoint = sortedData[sortedData.length - 1];
@@ -35,47 +32,36 @@ const AnalysisCard: React.FC<{ indicator: IndicatorConfig, data: any[], sector: 
   }
 
   const interpretation = useMemo(() => {
-    if (sortedData.length === 0) return "Sem dados suficientes para análise.";
+    if (sortedData.length === 0) return "Dados insuficientes.";
     const avg = (sortedData.reduce((acc, curr) => acc + curr.score, 0) / sortedData.length).toFixed(1);
     const goodTrend = indicator.isInverse ? trend === 'down' : trend === 'up';
-    let text = `Média histórica de ${avg}${indicator.unit}. `;
-    if (trend !== 'stable') {
-      text += `A tendência atual é de ${trend === 'up' ? 'alta' : 'queda'}, o que é considerado ${goodTrend ? 'positivo' : 'um ponto de atenção'}.`;
-    } else {
-      text += "O indicador apresenta estabilidade nos últimos períodos.";
-    }
-    return text;
+    return `Média: ${avg}${indicator.unit}. Tendência de ${trend === 'up' ? 'alta' : 'queda'} (${goodTrend ? 'Positivo' : 'Atenção'}).`;
   }, [sortedData, trend, indicator]);
 
   if (sortedData.length === 0) return null;
 
   return (
-    <div className="bg-white border border-slate-200 rounded-lg p-4 break-inside-avoid shadow-sm print:shadow-none print:border-slate-300">
+    <div className="bg-white border border-slate-200 rounded-lg p-5 break-inside-avoid shadow-sm print:shadow-none print:border-slate-300">
       <div className="flex justify-between items-start mb-4">
-        <div>
-          <h4 className="font-bold text-slate-800">{indicator.name}</h4>
-          <p className="text-xs text-slate-500">{indicator.description}</p>
-        </div>
-        <div className="flex items-center gap-1 text-sm font-bold">
+        <div><h4 className="font-bold text-slate-900">{indicator.name}</h4><p className="text-[10px] text-slate-500 font-medium">{indicator.description}</p></div>
+        <div className="flex items-center gap-1 text-sm font-black">
           {trend === 'up' && <TrendingUp size={16} className={indicator.isInverse ? "text-red-500" : "text-emerald-500"} />}
           {trend === 'down' && <TrendingDown size={16} className={indicator.isInverse ? "text-emerald-500" : "text-red-500"} />}
-          {trend === 'stable' && <Minus size={16} className="text-slate-400" />}
           <span>{lastPoint?.score}{indicator.unit}</span>
         </div>
       </div>
-      <div className="h-48 w-full mb-4">
+      <div className="h-44 w-full mb-4">
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={sortedData}>
-            <CartesianGrid strokeDasharray="3 3" vertical={false} />
-            <XAxis dataKey="label" tick={{fontSize: 10}} interval="preserveStartEnd" />
-            <YAxis tick={{fontSize: 10}} domain={[0, 'auto']} />
-            <Tooltip />
-            <Line type="monotone" dataKey="score" stroke="#0ea5e9" strokeWidth={2} dot={{r: 2}} name={indicator.unit || "Valor"} />
+            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+            <XAxis dataKey="label" tick={{fontSize: 10, fontWeight: 'bold', fill: '#1e293b'}} />
+            <YAxis tick={{fontSize: 10, fill: '#64748b'}} />
+            <Line type="monotone" dataKey="score" stroke="#0ea5e9" strokeWidth={3} dot={{r: 3, fill: '#0ea5e9'}} />
           </LineChart>
         </ResponsiveContainer>
       </div>
-      <div className="bg-slate-50 p-3 rounded text-sm text-slate-700 italic border-l-4 border-sky-400 print:bg-transparent print:p-0 print:text-xs">
-        <span className="font-bold not-italic">Análise: </span>{interpretation}
+      <div className="bg-slate-50 p-2 rounded text-[11px] text-slate-800 font-medium italic border-l-4 border-sky-500 print:bg-transparent">
+        <span className="font-black not-italic text-slate-900">Análise técnica: </span>{interpretation}
       </div>
     </div>
   );
@@ -85,62 +71,38 @@ export const GlobalAnalytics: React.FC<GlobalAnalyticsProps> = ({ currentFilters
   const [allRecords, setAllRecords] = useState<IndicatorRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showPrintModal, setShowPrintModal] = useState(false);
-  
-  // Opções de Filtro Local (Sincronizado com o que será impresso)
   const [activeSector, setActiveSector] = useState(currentFilters.sector);
-  const [printSections, setPrintSections] = useState({
-    identificacao: true,
-    cirurgia: true,
-    lpp: true,
-    quedas: true
-  });
-
-  // Atualizar setor ativo quando os filtros globais mudarem externamente
-  useEffect(() => {
-    setActiveSector(currentFilters.sector);
-  }, [currentFilters.sector]);
+  const [printSections, setPrintSections] = useState({ identificacao: true, cirurgia: true, lpp: true, quedas: true });
 
   useEffect(() => {
     const fetchRecords = async () => {
       setIsLoading(true);
-      const records = await storage.loadRecords();
-      setAllRecords(records);
+      try {
+        const records = await storage.loadRecords();
+        setAllRecords(records);
+      } catch (err) { console.error(err); }
       setIsLoading(false);
     };
     fetchRecords();
   }, []);
 
   const getIndicatorData = (indicatorId: string, sector: string) => {
-    const relevantRecords = allRecords.filter(r => r.sector === sector && r.indicatorId === indicatorId && !r.isIgnored);
-    return relevantRecords.map(r => {
+    const relevant = allRecords.filter(r => r.sector === sector && r.indicatorId === indicatorId && !r.isIgnored);
+    const config = [...PATIENT_IDENTIFICATION_INDICATORS, ...SAFE_SURGERY_INDICATORS, ...PRESSURE_INJURY_INDICATORS, ...FALLS_INDICATORS].find(i => i.id === indicatorId);
+    return relevant.map(r => {
         let score = 0;
-        const indConfig = [...PATIENT_IDENTIFICATION_INDICATORS, ...SAFE_SURGERY_INDICATORS, ...PRESSURE_INJURY_INDICATORS, ...FALLS_INDICATORS].find(i => i.id === indicatorId);
-        if (indConfig) {
-             if (indConfig.type === 'count') score = r.numerator;
-             else if (r.denominator > 0) {
-                 const factor = indConfig.type === 'rate_1000' ? 1000 : 100;
-                 score = Number(((r.numerator * factor) / r.denominator).toFixed(2));
-             }
-        }
-        return { year: r.year, month: r.month, label: `${r.month}/${r.year}`, score: score };
+        if (config?.type === 'count') score = r.numerator;
+        else if (r.denominator > 0) score = Number(((r.numerator * (config?.type === 'rate_1000' ? 1000 : 100)) / r.denominator).toFixed(2));
+        return { year: r.year, month: r.month, label: `${r.month}/${r.year}`, score };
     });
   };
 
   const handlePrint = () => {
     setShowPrintModal(false);
-    // Pequeno delay para garantir que o modal fechou e a UI atualizou antes do print dialog
-    setTimeout(() => {
-      window.print();
-    }, 500);
+    setTimeout(() => { window.print(); }, 700);
   };
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <Loader2 className="animate-spin text-sky-600" size={48} />
-      </div>
-    );
-  }
+  if (isLoading) return <div className="flex items-center justify-center h-full"><Loader2 className="animate-spin text-sky-600" size={48} /></div>;
 
   const sections = [
     { key: 'identificacao', title: "Identificação do Paciente", indicators: PATIENT_IDENTIFICATION_INDICATORS },
@@ -151,115 +113,69 @@ export const GlobalAnalytics: React.FC<GlobalAnalyticsProps> = ({ currentFilters
 
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-8 pb-20 print:p-0">
+      <style>{`
+        @media print {
+          body { background: white !important; font-family: sans-serif; }
+          .print-title { display: block !important; margin-bottom: 2rem; border-bottom: 3px solid #0f172a; padding-bottom: 1rem; }
+          .print\\:hidden { display: none !important; }
+          section { page-break-after: always; margin-bottom: 3rem; }
+          .grid { display: grid !important; grid-template-columns: 1fr 1fr !important; gap: 1.5rem !important; }
+        }
+      `}</style>
+
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-slate-200 pb-6 print:hidden">
-        <div>
-          <h2 className="text-3xl font-bold text-slate-800 tracking-tight">Visão Global & Relatórios</h2>
-          <p className="text-slate-500 text-lg">Análise histórica para: <span className="font-bold text-sky-600">{activeSector}</span></p>
-        </div>
-        <button 
-          onClick={() => setShowPrintModal(true)} 
-          className="flex items-center gap-2 bg-slate-800 text-white px-4 py-2 rounded-lg hover:bg-slate-700 transition-colors shadow-lg"
-        >
-          <Printer size={18} /> Imprimir Relatório
-        </button>
+        <div><h2 className="text-3xl font-black text-slate-900 tracking-tight">Painel de Performance Global</h2><p className="text-slate-600 font-medium">Análise de tendências para o setor: <span className="font-black text-sky-600 underline">{activeSector}</span></p></div>
+        <button onClick={() => setShowPrintModal(true)} className="flex items-center gap-2 bg-slate-900 text-white px-5 py-2.5 rounded-xl hover:bg-slate-800 shadow-xl font-bold transition-all"><Printer size={18} /> Imprimir Relatórios</button>
       </div>
 
-      {/* Título Visível Apenas no Print */}
-      <div className="hidden print:block mb-8">
-        <h1 className="text-2xl font-bold text-slate-900">Relatório de Qualidade Hospitalar</h1>
-        <p className="text-slate-600">Setor: <span className="font-bold">{activeSector}</span> | Data: {new Date().toLocaleDateString('pt-BR')}</p>
-        <hr className="mt-4 border-slate-300" />
+      <div className="hidden print-title">
+        <h1 className="text-3xl font-black text-slate-900">Relatório Consolidado de Qualidade Hospitalar</h1>
+        <div className="flex justify-between mt-4 font-bold text-slate-600">
+          <span>Unidade: {activeSector}</span>
+          <span>Data de Emissão: {new Date().toLocaleDateString('pt-BR')}</span>
+        </div>
       </div>
 
       <div className="space-y-12">
-        {sections.map(section => {
-          const isVisible = printSections[section.key as keyof typeof printSections];
-          
-          return (
-            <section key={section.title} className={isVisible ? "" : "print:hidden"}>
-              <h3 className="text-xl font-bold text-slate-900 mb-4 bg-slate-100 p-2 rounded print:bg-transparent print:p-0 print:border-b print:border-slate-200">
-                {section.title}
-              </h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 print:grid-cols-2">
-                {section.indicators.map(ind => {
-                  const data = getIndicatorData(ind.id, activeSector);
-                  if (data.length === 0) return null;
-                  return (
-                    <AnalysisCard key={ind.id} indicator={ind} data={data} sector={activeSector} />
-                  );
-                })}
-              </div>
-            </section>
-          );
-        })}
+        {sections.map(section => (
+          <section key={section.title} className={printSections[section.key as keyof typeof printSections] ? "" : "print:hidden"}>
+            <h3 className="text-xl font-black text-slate-900 mb-6 bg-slate-100 p-3 rounded-lg print:bg-transparent print:p-0 print:border-b-2 print:border-slate-900 print:mb-8">{section.title}</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              {section.indicators.map(ind => {
+                const data = getIndicatorData(ind.id, activeSector);
+                return data.length > 0 ? <AnalysisCard key={ind.id} indicator={ind} data={data} sector={activeSector} /> : null;
+              })}
+            </div>
+          </section>
+        ))}
       </div>
 
-      {/* MODAL DE IMPRESSÃO */}
       {showPrintModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200">
-            <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50">
-              <div className="flex items-center gap-2">
-                <FileText className="text-sky-600" size={20} />
-                <h3 className="font-bold text-slate-800 text-lg">Configurar Relatório</h3>
-              </div>
-              <button onClick={() => setShowPrintModal(false)} className="text-slate-400 hover:text-slate-600 transition-colors p-1">
-                <X size={20} />
-              </button>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/80 backdrop-blur-md p-4 animate-in fade-in">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden border border-slate-200">
+            <div className="p-6 border-b flex justify-between items-center bg-slate-50">
+              <div className="flex items-center gap-3"><FileText className="text-sky-600" size={24} /><h3 className="font-black text-slate-900 text-lg">Configurar Relatório</h3></div>
+              <button onClick={() => setShowPrintModal(false)} className="text-slate-400 hover:text-slate-900"><X size={24} /></button>
             </div>
-            
-            <div className="p-6 space-y-6">
-              {/* Setor */}
-              <div className="space-y-2">
-                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">Setor para o Relatório</label>
-                <select 
-                  className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm font-medium focus:ring-2 focus:ring-sky-500 outline-none"
-                  value={activeSector}
-                  onChange={(e) => setActiveSector(e.target.value)}
-                >
+            <div className="p-8 space-y-6">
+              <div>
+                <label className="block text-xs font-black text-slate-500 uppercase tracking-widest mb-2">Unidade / Setor</label>
+                <select className="w-full border-2 border-slate-200 p-3 rounded-xl bg-white text-slate-900 font-bold focus:border-sky-500 outline-none" value={activeSector} onChange={(e) => setActiveSector(e.target.value)}>
                   {SECTORS.map(s => <option key={s} value={s}>{s}</option>)}
                 </select>
-                <p className="text-[10px] text-slate-400 italic">Mudar o setor aqui atualizará os gráficos ao fundo.</p>
               </div>
-
-              {/* Seções */}
               <div className="space-y-3">
-                <label className="text-xs font-bold text-slate-400 uppercase tracking-wider">Módulos para Incluir</label>
-                <div className="grid grid-cols-1 gap-2">
-                  {Object.entries({
-                    identificacao: "Identificação do Paciente",
-                    cirurgia: "Cirurgia Segura",
-                    lpp: "Lesão por Pressão",
-                    quedas: "Prevenção de Quedas"
-                  }).map(([key, label]) => (
-                    <label key={key} className="flex items-center gap-3 p-3 bg-slate-50 hover:bg-slate-100 rounded-lg cursor-pointer transition-colors border border-transparent hover:border-slate-200 group">
-                      <input 
-                        type="checkbox" 
-                        className="w-4 h-4 text-sky-600 rounded border-slate-300 focus:ring-sky-500"
-                        checked={printSections[key as keyof typeof printSections]}
-                        onChange={(e) => setPrintSections({...printSections, [key]: e.target.checked})}
-                      />
-                      <span className="text-sm font-medium text-slate-700">{label}</span>
-                    </label>
-                  ))}
-                </div>
+                <label className="block text-xs font-black text-slate-500 uppercase tracking-widest">Módulos de Auditoria</label>
+                {Object.entries({identificacao: "Identificação do Paciente", cirurgia: "Protocolo de Cirurgia Segura", lpp: "Prevenção de LPP", quedas: "Protocolo de Quedas"}).map(([key, label]) => (
+                  <label key={key} className="flex items-center gap-3 p-3 bg-slate-50 hover:bg-slate-100 rounded-xl cursor-pointer font-bold text-slate-700 transition-colors">
+                    <input type="checkbox" className="w-5 h-5 text-sky-600 rounded focus:ring-sky-500" checked={printSections[key as keyof typeof printSections]} onChange={(e) => setPrintSections({...printSections, [key]: e.target.checked})} /> {label}
+                  </label>
+                ))}
               </div>
             </div>
-
-            <div className="p-6 bg-slate-50 border-t border-slate-100 flex gap-3">
-              <button 
-                onClick={() => setShowPrintModal(false)}
-                className="flex-1 px-4 py-2.5 border border-slate-200 rounded-xl font-semibold text-slate-600 hover:bg-white transition-colors"
-              >
-                Cancelar
-              </button>
-              <button 
-                onClick={handlePrint}
-                className="flex-1 px-4 py-2.5 bg-slate-800 text-white rounded-xl font-bold hover:bg-slate-700 transition-colors shadow-lg flex items-center justify-center gap-2"
-              >
-                <CheckCircle2 size={18} />
-                Gerar PDF
-              </button>
+            <div className="p-6 bg-slate-50 border-t flex gap-3">
+              <button onClick={() => setShowPrintModal(false)} className="flex-1 p-3 bg-white border-2 border-slate-200 rounded-xl font-bold text-slate-600">Cancelar</button>
+              <button onClick={handlePrint} className="flex-1 p-3 bg-slate-900 text-white font-black rounded-xl shadow-lg hover:bg-black transition-all">GERAR RELATÓRIO</button>
             </div>
           </div>
         </div>
