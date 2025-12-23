@@ -51,14 +51,18 @@ const IndicatorSection: React.FC<SectionProps> = ({
       const defaultDenom = indicator.fixedDenominator || (indicator.type === 'rate_1000' ? 0 : 1);
       const num = record ? record.numerator : 0;
       const den = record ? record.denominator : defaultDenom;
+      
+      // Corrigido: usando apenas isIgnored conforme definido em types.ts
+      const isIgnored = record?.isIgnored || false;
+      
       return {
         month: m.value,
         monthName: m.label.substring(0, 3),
         numerator: num,
         denominator: den,
         observation: record ? record.observation : '',
-        score: record?.isIgnored ? null : calculateScore(num, den, indicator),
-        isIgnored: record?.is_ignored || record?.isIgnored || false
+        score: isIgnored ? null : calculateScore(num, den, indicator),
+        isIgnored
       };
     });
   }, [allRecords, filters.sector, filters.year, indicator]);
@@ -104,7 +108,8 @@ const IndicatorSection: React.FC<SectionProps> = ({
     if (valid.length === 0) return 0;
     const sum = valid.reduce((acc, curr) => acc + (curr.score || 0), 0);
     if (indicator.type === 'count') return sum;
-    return (sum / valid.length).toFixed(indicator.type === 'rate_1000' ? 2 : 1);
+    const avg = sum / valid.length;
+    return Number(avg.toFixed(indicator.type === 'rate_1000' ? 2 : 1));
   }, [currentData, indicator]);
 
   const isGoodScore = (score: number | null) => {
