@@ -1,0 +1,5 @@
+{
+  "name": "NQSP Monitor de Indicadores",
+  "description": "Sistema de Monitoramento de Qualidade e Segurança do Paciente (NQSP) com indicadores em tempo real.",
+  "requestFramePermissions": []
+}
